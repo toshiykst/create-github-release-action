@@ -1,0 +1,77 @@
+name: Create release
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - release
+env:
+  MAJOR_RELEASE_LABEL_NAME: major release
+  MINOR_RELEASE_LABEL_NAME: minor release
+  PATCH_RELEASE_LABEL_NAME: patch release.
+jobs:
+  create_release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check release label
+        run: |
+          release_labels=$(echo '${{ toJSON(github.event.pull_request.labels) }}' \
+                          | jq --arg major_release "$MAJOR_RELEASE_LABEL_NAME" \
+                               --arg minor_release "$MINOR_RELEASE_LABEL_NAME" \
+                               --arg patch_release "$PATCH_RELEASE_LABEL_NAME" \
+                               '.[] | select(.name == $major_release or .name == $minor_release or .name == $patch_release)' \
+                          | jq -s '.')
+          release_label_count=$(echo "${release_labels}" | jq '. | length')
+
+          if [ ${release_label_count} -ne 1 ]; then
+            echo 'Only one release label needs to be set'
+            exit 1
+          fi
+      - name: Get latest version
+        id: get-latest-version
+        run: |
+          latest_version=$(gh release view --json tagName | jq -r '.tagName' 2>/dev/null)
+
+          echo "The latest version is ${latest_version:=0.0.0}"
+
+          version_arr=(${latest_version//./ })
+
+          major_version=${version_arr[0]}
+          minor_version=${version_arr[1]}
+          patch_version=${version_arr[2]}
+
+          echo ::set-output name=major_version::$major_version
+          echo ::set-output name=minor_version::$minor_version
+          echo ::set-output name=patch_version::$patch_version
+      - name: Create major release
+        if: contains(github.event.pull_request.labels.*.name, env.MAJOR_RELEASE_LABEL_NAME)
+        run: |
+          major_version=${{ steps.get-latest-version.outputs.major_version }}
+
+          new_version=$(($major_version+1)).0.0
+
+          gh release create $new_version --notes "SOME NOTES" --generate-notes
+      - name: Create minor release
+        if: contains(github.event.pull_request.labels.*.name, env.MINOR_RELEASE_LABEL_NAME)
+        run: |
+          major_version=${{ steps.get-latest-version.outputs.major_version }}
+          minor_version=${{ steps.get-latest-version.outputs.minor_version }}
+
+          new_version=$major_version.$(($minor_version+1)).0
+
+          gh release create $new_version --notes "Release notes" --generate-notes
+      - name: Create patch release
+        if: contains(github.event.pull_request.labels.*.name, env.PATCH_RELEASE_LABEL_NAME)
+        run: |
+          major_version=${{ steps.get-latest-version.outputs.major_version }}
+          minor_version=${{ steps.get-latest-version.outputs.minor_version }}
+          patch_version=${{ steps.get-latest-version.outputs.patch_version }}
+
+          new_version=$major_version.$minor_version.$(($patch_version+1))
+
+          gh release create $new_version --notes "Release notes" --generate-notes
