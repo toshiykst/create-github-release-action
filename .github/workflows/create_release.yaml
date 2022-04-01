@@ -9,7 +9,7 @@ on:
 env:
   MAJOR_RELEASE_LABEL_NAME: major release
   MINOR_RELEASE_LABEL_NAME: minor release
-  PATCH_RELEASE_LABEL_NAME: patch release.
+  PATCH_RELEASE_LABEL_NAME: patch release
 jobs:
   create_release:
     if: github.event.pull_request.merged == true
